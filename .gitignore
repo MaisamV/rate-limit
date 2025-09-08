@@ -1,0 +1,12 @@
+.idea
+.idea/*
+bin/
+bin/*
+build/helm
+build/helm/*
+.cursor
+.cursor/*
+.trae
+.trae/*
+docs
+docs/*

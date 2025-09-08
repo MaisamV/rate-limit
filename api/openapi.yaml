@@ -1,0 +1,345 @@
+openapi: 3.0.3
+info:
+  title: Go Clean Architecture API
+  description: |
+    A RESTful API built with Go following Clean Architecture principles.
+    This API provides a modular monolith structure with clear separation of concerns.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@go-clean-api.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.go-clean.com
+    description: Production server
+
+paths:
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns a simple PONG response to verify the service is running
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PingResponse'
+              example:
+                message: "PONG"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Detailed health check
+      description: Returns detailed health information including database and Redis connectivity
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service and dependencies are healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                timestamp: "2024-01-15T10:30:00Z"
+                checks:
+                  database:
+                    status: "up"
+                    response_time_ms: 25
+                  redis:
+                    status: "up"
+                    response_time_ms: 5
+        '503':
+          description: Service or dependencies are unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "unhealthy"
+                timestamp: "2024-01-15T10:35:00Z"
+                checks:
+                  database:
+                    status: "down"
+                    response_time_ms: 500
+                  redis:
+                    status: "up"
+                    response_time_ms: 5
+
+  /liveness:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe endpoint
+      description: Returns liveness status for Kubernetes liveness probes. Checks if the service is alive and capable of processing requests.
+      operationId: livenessCheck
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+        '503':
+          description: Service is dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /rate-limit:
+    post:
+      tags:
+        - Rate Limit
+      summary: Check rate limit for a user
+      description: Checks if a user has exceeded their rate limit and returns detailed information including remaining requests and reset time
+      operationId: checkRateLimit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateLimitRequest'
+            example:
+              user_id: "user123"
+              limit: 100
+      responses:
+        '200':
+          description: Rate limit check successful - user is within limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitResponse'
+              example:
+                allowed: true
+                remaining: 85
+                reset_time_seconds: 3600
+                user_id: "user123"
+                limit: 100
+        '429':
+          description: Rate limit exceeded - user has exceeded their limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitResponse'
+              example:
+                allowed: false
+                remaining: 0
+                reset_time_seconds: 1800
+                user_id: "user123"
+                limit: 100
+        '400':
+          description: Bad request - invalid input parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "VALIDATION_ERROR"
+                message: "user_id is required"
+                timestamp: "2024-01-15T10:30:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    PingResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: The ping response message
+          example: "PONG"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type or code
+          example: "INTERNAL_ERROR"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "An internal server error occurred"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2024-01-15T10:30:00Z"
+        request_id:
+          type: string
+          description: Unique request identifier for tracing
+          example: "req_123456789"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - checks
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          description: Overall health status
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+          example: "2024-01-15T10:30:00Z"
+        checks:
+          type: object
+          description: Individual health checks for components like database and redis
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentHealth'
+
+    ComponentHealth:
+      type: object
+      required:
+        - status
+        - response_time_ms
+      properties:
+        status:
+          type: string
+          enum: [up, down]
+          description: Component health status
+          example: "up"
+        response_time_ms:
+          type: integer
+          description: Response time for the health check in milliseconds
+          example: 50
+
+    LivenessResponse:
+      type: object
+      required:
+        - status
+        - uptime_seconds
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: ["alive", "dead"]
+          description: Liveness status of the service
+          example: "alive"
+        uptime_seconds:
+          type: integer
+          format: int64
+          description: Service uptime in seconds since startup
+          example: 3600
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when the liveness check was performed
+          example: "2024-01-15T10:30:00Z"
+
+    RateLimitRequest:
+      type: object
+      required:
+        - user_id
+        - limit
+      properties:
+        user_id:
+          type: string
+          description: Unique identifier for the user
+          example: "user123"
+          minLength: 1
+        limit:
+          type: integer
+          description: Maximum number of requests allowed for the user
+          example: 100
+          minimum: 1
+
+    RateLimitResponse:
+      type: object
+      required:
+        - allowed
+        - remaining
+        - reset_time_seconds
+        - user_id
+        - limit
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the request is allowed (user is within rate limit)
+          example: true
+        remaining:
+          type: integer
+          description: Number of requests remaining in the current window
+          example: 85
+          minimum: 0
+        reset_time_seconds:
+          type: integer
+          format: int64
+          description: Time in seconds until the rate limit resets
+          example: 3600
+          minimum: 0
+        user_id:
+          type: string
+          description: Unique identifier for the user
+          example: "user123"
+        limit:
+          type: integer
+          description: Maximum number of requests allowed for the user
+          example: 100
+          minimum: 1
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for authentication
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+tags:
+  - name: Health
+    description: Health check and monitoring endpoints
+  - name: Rate Limit
+    description: Rate limiting endpoints for controlling request frequency
+
+externalDocs:
+  description: Find more info about Go Clean Architecture
+  url: https://github.com/your-org/go-clean-architecture
